@@ -1,0 +1,32 @@
+# Secrets - never commit
+backend/.env
+.env
+*.env.local
+
+# Database dumps/backups/data exports - contain real business data, never commit
+backups/
+*.dump
+*.sql.gz
+bulk_invoice_ids.txt
+unmatched_payout_ids.txt
+
+# Claude Code local session state - contains machine-specific approved
+# commands that can embed secrets pasted into the terminal during a session
+.claude/settings.local.json
+
+# Python
+backend/.venv/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Editor/OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

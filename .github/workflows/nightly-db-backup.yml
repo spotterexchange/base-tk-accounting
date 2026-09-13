@@ -1,0 +1,51 @@
+name: Nightly database backup
+
+# Full pg_dump of the shared Render Postgres (recon + fulfillment schemas),
+# stored as a GitHub artifact. This is the off-Render disaster-recovery
+# layer: Render's paid plan covers ~1 day of point-in-time recovery, these
+# dumps cover the "noticed days later" cases and provider-level failures.
+#
+# Retention is 30 days to stay inside GitHub's Actions storage quota for
+# private repos (~500MB free; dumps run ~10MB compressed).
+#
+# Requires repository secret DATABASE_URL (the external Render connection
+# string). Runs at 08:00 UTC, before the 09:00 inventory refresh.
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Install PostgreSQL 18 client
+        run: |
+          sudo sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+
+      - name: Dump database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          STAMP=$(date -u +%Y-%m-%d)
+          /usr/lib/postgresql/18/bin/pg_dump "$DATABASE_URL" -Fc -f "accounting_backend-$STAMP.dump"
+          ls -la accounting_backend-$STAMP.dump
+          # Sanity check: a dump under 1MB means something went badly wrong
+          SIZE=$(stat -c%s "accounting_backend-$STAMP.dump")
+          if [ "$SIZE" -lt 1000000 ]; then
+            echo "dump suspiciously small ($SIZE bytes) - failing"
+            exit 1
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: accounting_backend-*.dump
+          retention-days: 30
+          if-no-files-found: error
